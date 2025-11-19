@@ -4,47 +4,84 @@ import Combine
 @MainActor
 final class StopsViewModel: ObservableObject {
     
-    // MARK: - Published Properties
     @Published private(set) var stops: [StopData] = []
     @Published private(set) var isLoading = false
+    @Published private(set) var loadingMessage = ""
     @Published var errorMessage: String?
     
-    // MARK: - Dependencies
     private let apiService: EMTAPIServiceProtocol
     private let dbService: DatabaseServiceProtocol
-    
     private var cancellables = Set<AnyCancellable>()
+    
+    private var currentPage = 0
+    private let pageSize = 50
+    private var canLoadMorePages = true
     
     init(apiService: EMTAPIServiceProtocol, dbService: DatabaseServiceProtocol) {
         self.apiService = apiService
         self.dbService = dbService
     }
     
-    // MARK: - Public Methods
-    
-    func fetchStops() {
-        isLoading = true
-        errorMessage = nil
+    func syncStops() {
+        guard !isLoading else { return }
         
-        // Chain of publishers:
-        // 1. Get token from the database.
-        // 2. Use the token to call the API for stops.
+        self.isLoading = true
+        self.errorMessage = nil
+        self.loadingMessage = "Sincronizando paradas..."
+        
         dbService.getToken()
             .flatMap { [weak self] token -> AnyPublisher<[StopData], Error> in
                 guard let self = self else { return Fail(error: URLError(.cancelled)).eraseToAnyPublisher() }
                 guard let token = token else { return Fail(error: URLError(.userAuthenticationRequired)).eraseToAnyPublisher() }
-                
-                // Use the fetched token to make the API call
                 return self.apiService.getAllStops(accessToken: token.accessToken)
             }
-            .receive(on: DispatchQueue.main) // Switch to the main thread for UI updates
+            .flatMap { [weak self] stopData -> AnyPublisher<Int, Error> in
+                guard let self = self else { return Fail(error: URLError(.cancelled)).eraseToAnyPublisher() }
+                return self.dbService.processAndSaveStops(from: stopData)
+            }
+            .flatMap { [weak self] savedCount -> AnyPublisher<[StopData], Error> in
+                guard let self = self else { return Fail(error: URLError(.cancelled)).eraseToAnyPublisher() }
+                print("\(savedCount) paradas guardadas en la base de datos.")
+                self.currentPage = 0
+                self.stops = []
+                self.canLoadMorePages = true
+                return self.dbService.getStopsFromDB(limit: self.pageSize, offset: 0)
+            }
+            .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
                 self?.isLoading = false
                 if case .failure(let error) = completion {
-                    self?.errorMessage = "Error al cargar las paradas: \(error.localizedDescription)"
+                    self?.errorMessage = "Error en la sincronización: \(error.localizedDescription)"
                 }
-            }, receiveValue: { [weak self] stops in
-                self?.stops = stops
+            }, receiveValue: { [weak self] initialStops in
+                self?.stops = initialStops
+                if initialStops.isEmpty {
+                    self?.errorMessage = "La API no devolvió paradas."
+                }
+            })
+            .store(in: &cancellables)
+    }
+    
+    func loadMoreStops() {
+        guard !isLoading, canLoadMorePages else { return }
+        
+        isLoading = true
+        currentPage += 1
+        let offset = currentPage * pageSize
+        
+        dbService.getStopsFromDB(limit: pageSize, offset: offset)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] completion in
+                self?.isLoading = false
+                if case .failure = completion {
+                    self?.canLoadMorePages = false
+                }
+            }, receiveValue: { [weak self] newStops in
+                if newStops.isEmpty {
+                    self?.canLoadMorePages = false
+                } else {
+                    self?.stops.append(contentsOf: newStops)
+                }
             })
             .store(in: &cancellables)
     }

@@ -5,16 +5,6 @@ import PackageDescription
 
 let package = Package(
     name: "ForkyTransportPackage",
-    platforms: [
-        .iOS(.v15)
-    ],
-    products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
-        .library(
-            name: "ForkyTransportPackage",
-            targets: ["ForkyTransportPackage"]
-        ),
-    ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.29.0")
     ],

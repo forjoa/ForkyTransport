@@ -4,39 +4,47 @@ import SwiftUI
 struct ForkyTransportApp: App {
     
     // MARK: - Core Services
-    // These are the single instances of our services that the app will use.
     private let apiService: EMTAPIServiceProtocol
-    private let dbService: DatabaseServiceProtocol
+    private let dbService: DatabaseServiceProtocol? // Now optional
     
     // MARK: - App State
     @StateObject private var router = Router()
     
     init() {
-        do {
-            self.dbService = try DatabaseService()
-            self.apiService = try EMTAPIService()
-        } catch {
-            // If the database fails to initialize, it's a fatal error.
-            fatalError("Failed to initialize DatabaseService: \(error.localizedDescription)")
-        }
+        print("[App] App Initializing...")
+        // Initialize the concrete services
+        self.apiService = EMTAPIService()
+        self.dbService = DatabaseService() // Use the failable init
+        print("[App] > apiService initialized.")
+        print("[App] > dbService initialized: \(dbService != nil)")
     }
     
     var body: some Scene {
         WindowGroup {
-            // The RootView listens to the router and presents the correct screen.
-            // This is the central point of navigation logic.
-            switch router.currentScreen {
-            case .login:
-                // We create and inject the ViewModel with its dependencies here.
-                let loginViewModel = LoginViewModel(
-                    apiService: apiService,
-                    dbService: dbService,
-                    router: router
+            // Check if critical services were initialized correctly.
+            if let dbService = dbService {
+                // If services are OK, show the main app view.
+                VStack { // Use a VStack to easily add a log
+                    Text("").onAppear { print("[App] Main app body appeared with valid services.") }
+                    switch router.currentScreen {
+                    case .login:
+                        let loginViewModel = LoginViewModel(
+                            apiService: apiService,
+                            dbService: dbService,
+                            router: router
+                        )
+                        LoginView(viewModel: loginViewModel)
+                        
+                    case .home:
+                        MainView(apiService: apiService, dbService: dbService)
+                    }
+                }
+            } else {
+                // If a service failed to init, show a critical error view.
+                ErrorView(
+                    title: "Error Crítico",
+                    message: "La base de datos no pudo ser inicializada. La aplicación no puede continuar. Por favor, reinstala la aplicación."
                 )
-                LoginView(viewModel: loginViewModel)
-                
-            case .home:
-                MainView(apiService: apiService, dbService: dbService)
             }
         }
     }

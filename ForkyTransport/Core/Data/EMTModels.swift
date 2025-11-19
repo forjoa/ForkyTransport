@@ -1,4 +1,11 @@
 import Foundation
+import GRDB
+
+// MARK: - App-specific Token Model
+struct EMTToken: Codable, Equatable {
+    let accessToken: String
+    let obtainedAt: Date
+}
 
 // MARK: - Login Response
 struct LoginResponse: Codable {
@@ -9,53 +16,25 @@ struct LoginData: Codable {
     let accessToken: String
 }
 
-// MARK: - Stops API Models
+// MARK: - Stops API Models (for V1 Endpoint)
+// This structure now perfectly matches the user's Postman response.
 struct StopsResponse: Codable {
+    let code: String
+    let description: String
     let data: [StopData]
 }
 
 struct StopData: Codable, Identifiable, Equatable {
-    let stopId: Int
+    let node: String
     let name: String
+    let wifi: String
+    let lines: [String]
     let geometry: Geometry
-    let lines: [LineInfo]
 
-    var id: Int { stopId }
-    
-    // Custom coding keys to map API response to our model
-    enum CodingKeys: String, CodingKey {
-        case stopId = "stop"
-        case name
-        case geometry
-        case lines
-    }
-}
-
-struct LineInfo: Codable, Equatable {
-    let line: String
-    let direction: String
-    let destination: String
+    var id: String { node }
 }
 
 struct Geometry: Codable, Equatable {
-    // Implementing Equatable for Geometry
-    static func == (lhs: Geometry, rhs: Geometry) -> Bool {
-        lhs.type == rhs.type && lhs.coordinates == rhs.coordinates
-    }
-    
     let type: String
     let coordinates: [Double]
-}
-
-// MARK: - Request Body for Stops
-// This is not needed if we fetch all stops, but good to have for the future.
-struct StopsRequestBody: Codable {
-    // Example properties for a more complex request
-    let postalCode: String?
-    let streetName: String?
-    
-    init(postalCode: String? = nil, streetName: String? = nil) {
-        self.postalCode = postalCode
-        self.streetName = streetName
-    }
 }
