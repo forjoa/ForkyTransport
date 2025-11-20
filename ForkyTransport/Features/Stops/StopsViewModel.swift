@@ -18,6 +18,7 @@ final class StopsViewModel: ObservableObject {
     private var currentPage = 0
     private let pageSize = 50
     private var canLoadMorePages = true
+    private var isSearching = false
 
     init(apiService: EMTAPIServiceProtocol, dbService: DatabaseServiceProtocol) {
         self.apiService = apiService
@@ -70,48 +71,65 @@ final class StopsViewModel: ObservableObject {
     }
 
     func loadMoreStops() {
-        guard !isLoading, canLoadMorePages else { return }
+        guard !isLoading, canLoadMorePages, !isSearching else { return }
 
-        // Don't load more when searching - we want to search the full dataset
-        if searchText.isEmpty {
-            isLoading = true
-            currentPage += 1
-            let offset = currentPage * pageSize
+        isLoading = true
+        currentPage += 1
+        let offset = currentPage * pageSize
 
-            dbService.getStopsFromDB(limit: pageSize, offset: offset)
-                .receive(on: DispatchQueue.main)
-                .sink(receiveCompletion: { [weak self] completion in
-                    DispatchQueue.main.async {
-                        self?.isLoading = false
-                        if case .failure = completion {
-                            self?.canLoadMorePages = false
+        dbService.getStopsFromDB(limit: pageSize, offset: offset)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] completion in
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    if case .failure = completion {
+                        self?.canLoadMorePages = false
+                    }
+                }
+            }, receiveValue: { [weak self] newStops in
+                DispatchQueue.main.async {
+                    if newStops.isEmpty {
+                        self?.canLoadMorePages = false
+                    } else {
+                        self?.stops.append(contentsOf: newStops)
+                        if !self!.isSearching ?? true {
+                            // Only update filteredStops if not currently searching
+                            self?.filteredStops = self?.stops ?? []
                         }
                     }
-                }, receiveValue: { [weak self] newStops in
-                    DispatchQueue.main.async {
-                        if newStops.isEmpty {
-                            self?.canLoadMorePages = false
-                        } else {
-                            self?.stops.append(contentsOf: newStops)
-                            self?.applySearchFilter()
-                        }
-                    }
-                })
-                .store(in: &cancellables)
-        }
+                }
+            })
+            .store(in: &cancellables)
     }
 
     func applySearchFilter() {
         if searchText.isEmpty {
+            isSearching = false
             filteredStops = stops
         } else {
-            filteredStops = stops.filter { stop in
-                stop.name.localizedCaseInsensitiveContains(searchText) ||
-                stop.node.localizedCaseInsensitiveContains(searchText) ||
-                stop.lines.contains { line in
-                    line.localizedCaseInsensitiveContains(searchText)
-                }
-            }
+            isSearching = true
+            // Search in database for matching stops
+            searchInDatabase(query: searchText)
         }
+    }
+
+    private func searchInDatabase(query: String) {
+        isLoading = true
+
+        dbService.searchStopsFromDB(query: query, limit: 100) // Limit results for performance
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] completion in
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    if case .failure(let error) = completion {
+                        print("Search failed: \(error)")
+                    }
+                }
+            }, receiveValue: { [weak self] searchResults in
+                DispatchQueue.main.async {
+                    self?.filteredStops = searchResults
+                }
+            })
+            .store(in: &cancellables)
     }
 }

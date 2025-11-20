@@ -11,6 +11,7 @@ protocol DatabaseServiceProtocol {
     // Stop Management
     func processAndSaveStops(from stopData: [StopData]) -> AnyPublisher<Int, Error>
     func getStopsFromDB(limit: Int, offset: Int) -> AnyPublisher<[StopData], Error>
+    func searchStopsFromDB(query: String, limit: Int) -> AnyPublisher<[StopData], Error>
 }
 
 // MARK: - Concrete Service Implementation
@@ -144,7 +145,7 @@ final class DatabaseService: DatabaseServiceProtocol {
                     try StopRecord.order(Column("id")).limit(limit, offset: offset).fetchAll(db)
                 }
                 print("[DBService] > getStopsFromDB: Fetched \(stopRecords.count) records from DB.")
-                
+
                 let stops = stopRecords.map { record -> StopData in
                     let lines = (try? JSONDecoder().decode([String].self, from: Data(record.lines.utf8))) ?? []
                     let geometry = Geometry(type: "Point", coordinates: [record.longitude, record.latitude])
@@ -153,6 +154,41 @@ final class DatabaseService: DatabaseServiceProtocol {
                 promise(.success(stops))
             } catch {
                 print("[DBService] > getStopsFromDB: FAILED with error: \(error)")
+                promise(.failure(error))
+            }
+        }.eraseToAnyPublisher()
+    }
+
+    func searchStopsFromDB(query: String, limit: Int) -> AnyPublisher<[StopData], Error> {
+        print("[DBService] searchStopsFromDB() called with query: \(query), limit: \(limit).")
+        return Future { promise in
+            do {
+                let stopRecords = try self.dbQueue.read { db in
+                    // Search in name, id (node), and lines - using LIKE for partial matching
+                    let searchPattern = "%\(query)%"
+                    let linesPattern = "%\"\(query)\"%" // For searching within the JSON array of lines
+
+                    let matchingRecords = try StopRecord
+                        .filter(
+                            Column("name").like(searchPattern) ||
+                            Column("id").like(searchPattern) ||
+                            Column("lines").like(linesPattern)
+                        )
+                        .limit(limit)
+                        .fetchAll(db)
+
+                    return matchingRecords
+                }
+                print("[DBService] > searchStopsFromDB: Found \(stopRecords.count) matching records from DB.")
+
+                let stops = stopRecords.map { record -> StopData in
+                    let lines = (try? JSONDecoder().decode([String].self, from: Data(record.lines.utf8))) ?? []
+                    let geometry = Geometry(type: "Point", coordinates: [record.longitude, record.latitude])
+                    return StopData(node: record.id, name: record.name, wifi: "0", lines: lines, geometry: geometry)
+                }
+                promise(.success(stops))
+            } catch {
+                print("[DBService] > searchStopsFromDB: FAILED with error: \(error)")
                 promise(.failure(error))
             }
         }.eraseToAnyPublisher()
