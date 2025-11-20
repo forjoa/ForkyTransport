@@ -8,6 +8,7 @@ final class ArrivalsViewModel: ObservableObject {
     @Published private(set) var stopInfo: StopInfo?
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
+    @Published private(set) var lastUpdateTime: Date?
 
     private let stopId: String
     private let apiService: EMTAPIServiceProtocol
@@ -45,6 +46,7 @@ final class ArrivalsViewModel: ObservableObject {
                 DispatchQueue.main.async {
                     self?.arrivalTimes = response.data.first?.arrive ?? []
                     self?.stopInfo = response.data.first?.stopInfo?.first
+                    self?.lastUpdateTime = Date() // Update the last update time
                     if self?.arrivalTimes.isEmpty == true {
                         self?.errorMessage = "No hay llegadas previstas para esta parada."
                     }
@@ -67,14 +69,29 @@ final class ArrivalsViewModel: ObservableObject {
     func colorFromHexString(_ hex: String) -> Color {
         var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
-        
+
         var rgb: UInt64 = 0
         Scanner(string: hexSanitized).scanHexInt64(&rgb)
-        
+
         let red = Double((rgb & 0xFF0000) >> 16) / 255.0
         let green = Double((rgb & 0x00FF00) >> 8) / 255.0
         let blue = Double(rgb & 0x0000FF) / 255.0
-        
+
         return Color(red: red, green: green, blue: blue)
+    }
+
+    /// Calculates the time interval since last update
+    func timeSinceLastUpdate() -> String {
+        guard let lastUpdate = lastUpdateTime else {
+            return "Nunca actualizado"
+        }
+
+        let now = Date()
+        let timeInterval = now.timeIntervalSince(lastUpdate)
+
+        let minutes = Int(timeInterval) / 60
+        let seconds = Int(timeInterval) % 60
+
+        return "\(minutes)m \(seconds)s"
     }
 }

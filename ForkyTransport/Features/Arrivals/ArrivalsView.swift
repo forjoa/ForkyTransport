@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ArrivalsView: View {
     @StateObject var viewModel: ArrivalsViewModel
-    
+
     var body: some View {
         VStack {
             if viewModel.isLoading {
@@ -30,7 +30,7 @@ struct ArrivalsView: View {
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
-                            
+
                             if let lines = stopInfo.lines, !lines.isEmpty {
                                 HStack {
                                     Text("Líneas:")
@@ -50,8 +50,14 @@ struct ArrivalsView: View {
                             }
                         }
                     }
-                    
-                    Section(header: Text("Próximas Llegadas")) {
+
+                    Section(header: HStack {
+                        Text("Próximas Llegadas")
+                        Spacer()
+                        Text("Actualizado hace: \(viewModel.timeSinceLastUpdate())")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }) {
                         if viewModel.arrivalTimes.isEmpty {
                             Text("No hay autobuses próximos.")
                                 .foregroundColor(.secondary)
@@ -78,6 +84,16 @@ struct ArrivalsView: View {
             }
         }
         .navigationTitle("Llegadas")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    viewModel.fetchArrivals()
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
         .onAppear {
             viewModel.fetchArrivals()
         }
