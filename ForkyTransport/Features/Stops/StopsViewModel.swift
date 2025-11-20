@@ -8,6 +8,8 @@ final class StopsViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var loadingMessage = ""
     @Published var errorMessage: String?
+    @Published var searchText = ""
+    @Published private(set) var filteredStops: [StopData] = []
 
     public let apiService: EMTAPIServiceProtocol
     public let dbService: DatabaseServiceProtocol
@@ -21,7 +23,7 @@ final class StopsViewModel: ObservableObject {
         self.apiService = apiService
         self.dbService = dbService
     }
-    
+
     func syncStops() {
         guard !isLoading else { return }
 
@@ -58,6 +60,7 @@ final class StopsViewModel: ObservableObject {
             }, receiveValue: { [weak self] initialStops in
                 DispatchQueue.main.async {
                     self?.stops = initialStops
+                    self?.applySearchFilter()
                     if initialStops.isEmpty {
                         self?.errorMessage = "La API no devolvió paradas."
                     }
@@ -69,28 +72,46 @@ final class StopsViewModel: ObservableObject {
     func loadMoreStops() {
         guard !isLoading, canLoadMorePages else { return }
 
-        isLoading = true
-        currentPage += 1
-        let offset = currentPage * pageSize
+        // Don't load more when searching - we want to search the full dataset
+        if searchText.isEmpty {
+            isLoading = true
+            currentPage += 1
+            let offset = currentPage * pageSize
 
-        dbService.getStopsFromDB(limit: pageSize, offset: offset)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                DispatchQueue.main.async {
-                    self?.isLoading = false
-                    if case .failure = completion {
-                        self?.canLoadMorePages = false
+            dbService.getStopsFromDB(limit: pageSize, offset: offset)
+                .receive(on: DispatchQueue.main)
+                .sink(receiveCompletion: { [weak self] completion in
+                    DispatchQueue.main.async {
+                        self?.isLoading = false
+                        if case .failure = completion {
+                            self?.canLoadMorePages = false
+                        }
                     }
-                }
-            }, receiveValue: { [weak self] newStops in
-                DispatchQueue.main.async {
-                    if newStops.isEmpty {
-                        self?.canLoadMorePages = false
-                    } else {
-                        self?.stops.append(contentsOf: newStops)
+                }, receiveValue: { [weak self] newStops in
+                    DispatchQueue.main.async {
+                        if newStops.isEmpty {
+                            self?.canLoadMorePages = false
+                        } else {
+                            self?.stops.append(contentsOf: newStops)
+                            self?.applySearchFilter()
+                        }
                     }
+                })
+                .store(in: &cancellables)
+        }
+    }
+
+    func applySearchFilter() {
+        if searchText.isEmpty {
+            filteredStops = stops
+        } else {
+            filteredStops = stops.filter { stop in
+                stop.name.localizedCaseInsensitiveContains(searchText) ||
+                stop.node.localizedCaseInsensitiveContains(searchText) ||
+                stop.lines.contains { line in
+                    line.localizedCaseInsensitiveContains(searchText)
                 }
-            })
-            .store(in: &cancellables)
+            }
+        }
     }
 }
