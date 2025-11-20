@@ -7,7 +7,7 @@ protocol DatabaseServiceProtocol {
     // Token Management
     func saveToken(_ token: EMTToken) -> AnyPublisher<Void, Error>
     func getToken() -> AnyPublisher<EMTToken?, Error>
-    
+
     // Stop Management
     func processAndSaveStops(from stopData: [StopData]) -> AnyPublisher<Int, Error>
     func getStopsFromDB(limit: Int, offset: Int) -> AnyPublisher<[StopData], Error>
@@ -94,8 +94,12 @@ final class DatabaseService: DatabaseServiceProtocol {
                     print("[DBService] > > getToken: dbQueue.read block started.")
                     let record = try EMTTokenRecord.order(Column("id").desc).fetchOne(db)
                     print("[DBService] > > > getToken: fetchOne executed. Record is \(record != nil ? "found" : "not found").")
+                    if let foundRecord = record {
+                        print("[DBService] > > > TokenRecord content: id=\(foundRecord.id ?? -1), accessToken=\(foundRecord.accessToken.prefix(10))..., obtainedAt=\(foundRecord.obtainedAt)")
+                    }
                     return record
                 }
+                
                 let token = tokenRecord.map { EMTToken(accessToken: $0.accessToken, obtainedAt: $0.obtainedAt) }
                 promise(.success(token))
                 print("[DBService] > getToken: Future succeeded.")

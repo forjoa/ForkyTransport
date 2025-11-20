@@ -4,19 +4,25 @@ import Combine
 // MARK: - Service Protocol
 protocol EMTAPIServiceProtocol {
     func login(email: String, password: String) -> AnyPublisher<EMTToken, Error>
-    
+
     /// Fetches all bus stops and returns a decoded array of StopData objects.
     func getAllStops(accessToken: String) -> AnyPublisher<[StopData], Error>
+
+    /// Fetches arrival times for a specific stop.
+    func getArrivalTimes(stopId: String, accessToken: String) -> AnyPublisher<ArrivalResponse, Error>
 }
 
 // MARK: - Custom Error for API Logic
 enum EMTAPIError: Error, LocalizedError {
     case apiError(description: String)
+    case invalidResponse
     
     var errorDescription: String? {
         switch self {
         case .apiError(let description):
             return description
+        case .invalidResponse:
+            return "La respuesta de la API no es válida."
         }
     }
 }
@@ -85,6 +91,52 @@ final class EMTAPIService: EMTAPIServiceProtocol {
                 }
                 
                 return response.data
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func getArrivalTimes(stopId: String, accessToken: String) -> AnyPublisher<ArrivalResponse, Error> {
+        guard let url = URL(string: "https://openapi.emtmadrid.es/v2/transport/busemtmad/stops/\(stopId)/arrives") else {
+            return Fail(error: URLError(.badURL)).eraseToAnyPublisher()
+        }
+
+        print("[EMTAPIService] url for arrival")
+        print(url)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue(accessToken, forHTTPHeaderField: "accessToken")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+          "cultureInfo": "ES",
+          "Text_StopRequired_YN": "Y",
+          "Text_EstimationsRequired_YN": "Y",
+          "Text_IncidencesRequired_YN": "N",
+          "DateTime_Referenced_Incidencies_YYYYMMDD": "20231126"
+        ]
+
+        do {
+          request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        } catch {
+          print("Error serializing JSON:", error)
+        }
+
+        print("[EMTAPIService] getArrivalTimes: Sending request for stop \(stopId) with accessToken: \(accessToken.prefix(10))...")
+
+        return session.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                return data
+            }
+            .decode(type: ArrivalResponse.self, decoder: decoder)
+            .tryMap { arrivalResponse in
+                guard arrivalResponse.code == "00" else {
+                    throw EMTAPIError.apiError(description: "API Error (Arrivals): \(arrivalResponse.code) - \(arrivalResponse.description)")
+                }
+
+                return arrivalResponse
             }
             .eraseToAnyPublisher()
     }

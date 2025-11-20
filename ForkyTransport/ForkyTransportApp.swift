@@ -35,9 +35,10 @@ struct ForkyTransportApp: App {
                         )
                         LoginView(viewModel: loginViewModel)
                         
-                    case .home:
-                        MainView(apiService: apiService, dbService: dbService)
-                    }
+                                    case .home:
+                                        MainView(apiService: apiService, dbService: dbService)
+                                    case .arrivals(let stopId):
+                                        ArrivalsView(viewModel: ArrivalsViewModel(stopId: stopId, apiService: apiService, dbService: dbService))                    }
                 }
             } else {
                 // If a service failed to init, show a critical error view.

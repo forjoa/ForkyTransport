@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct StopsView: View {
-    
+
     @StateObject var viewModel: StopsViewModel
-    
+
     var body: some View {
         NavigationView {
             VStack {
@@ -29,15 +29,16 @@ struct StopsView: View {
                     .padding()
                 } else {
                     List(viewModel.stops) { stop in
-                        VStack(alignment: .leading) {
-                            Text(stop.name)
-                                .font(.headline)
-                            Text("ID: \(stop.node) | Líneas: \(stop.lines.joined(separator: ", "))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        NavigationLink(destination: ArrivalsView(viewModel: ArrivalsViewModel(stopId: stop.node, apiService: viewModel.apiService, dbService: viewModel.dbService))) {
+                            VStack(alignment: .leading) {
+                                Text(stop.name)
+                                    .font(.headline)
+                                Text("ID: \(stop.node) | Líneas: \(stop.lines.joined(separator: ", "))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                         .onAppear {
-                            // When the last item of the current list appears, load the next page.
                             if stop == viewModel.stops.last {
                                 viewModel.loadMoreStops()
                             }

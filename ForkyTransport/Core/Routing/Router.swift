@@ -3,9 +3,10 @@ import SwiftUI
 import Combine
 
 /// An enum to define all possible navigation destinations in the app.
-enum Screen {
+enum Screen: Equatable {
     case login
     case home
+    case arrivals(stopId: String)
 }
 
 /// The Router is a global, observable object responsible for managing the app's navigation state.
