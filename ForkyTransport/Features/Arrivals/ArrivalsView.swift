@@ -26,7 +26,7 @@ struct ArrivalsView: View {
                     if let stopInfo = viewModel.stopInfo {
                         Section(header: Text("Parada \(stopInfo.stopId ?? "N/A"): \(stopInfo.stopName ?? "Nombre Desconocido")")) {
                             if let direction = stopInfo.direction?.trimmingCharacters(in: .whitespacesAndNewlines), !direction.isEmpty {
-                                Text("Dirección: \(direction)")
+                                Text("\(direction)")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
